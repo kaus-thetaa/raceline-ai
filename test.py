@@ -23,7 +23,7 @@ while running:
 
     screen.fill((18, 18, 18))
     track.draw(screen)
-    pygame.draw.circle(screen, (255, 200, 0), (int(car.x), int(car.y)), 6)
+    car.draw(screen)
     pygame.display.flip()
     pygame.time.delay(16)
 

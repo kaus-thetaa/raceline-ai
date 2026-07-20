@@ -1,12 +1,13 @@
-from environment import RaceLineEnv
+from stats import StatsTracker
 
-env = RaceLineEnv()
-obs, info = env.reset()
-print("starting observation:", obs)
+tracker = StatsTracker()
+for _ in range(120):
+    tracker.record_step()
+tracker.record_lap()
+tracker.record_crash()
+tracker.set_episode(1)
+tracker.save()
+tracker.save_graph()
 
-for i in range(10):
-    action = env.action_space.sample()
-    obs, reward, terminated, truncated, info = env.step(action)
-    print(f"step {i} reward {reward:.3f} terminated {terminated}")
-    if terminated or truncated:
-        break
+print("total laps:", tracker.total_laps)
+print("first lap time:", tracker.first_lap_time)

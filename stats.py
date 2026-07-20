@@ -76,4 +76,4 @@ class StatsTracker:
 
         os.makedirs(os.path.dirname(image_path), exist_ok=True)
         plt.savefig(image_path)
-        plt.close()
+        plt.close() 

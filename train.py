@@ -42,13 +42,13 @@ class StatsCallback(BaseCallback):
         return True
 
 
-def main():
+def train(render=False, total_timesteps=TOTAL_TIMESTEPS):
     env = Monitor(RaceLineEnv())
     tracker = StatsTracker()
     callback = StatsCallback(tracker)
 
     model = PPO("MlpPolicy", env, verbose=1, device="cpu")
-    model.learn(total_timesteps=TOTAL_TIMESTEPS, callback=callback)
+    model.learn(total_timesteps=total_timesteps, callback=callback)
 
     os.makedirs("models", exist_ok=True)
     model.save(MODEL_SAVE_PATH)
@@ -57,6 +57,8 @@ def main():
     tracker.save_graph()
     print("training complete, model saved to", MODEL_SAVE_PATH)
 
+    return model, tracker
+
 
 if __name__ == "__main__":
-    main()
+    train()

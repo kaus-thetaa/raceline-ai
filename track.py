@@ -1,6 +1,7 @@
 # track.py
 # f1 style circuit geometry, curbs, checkered line, collision, progress
 
+import json
 import math
 import pygame
 
@@ -11,14 +12,26 @@ CURB_COLORS = [(210, 30, 30), (235, 235, 235)]
 
 
 class Track:
-    def __init__(self, track_width=70):
+    def __init__(self, track_width=70, centerline=None):
         self.track_width = track_width
-        self.centerline = self._build_centerline()
+        self.centerline = centerline if centerline else self._default_centerline()
+
+        if len(self.centerline) < 3:
+            raise ValueError("track needs at least 3 points to form a loop")
+
         self.outer_points, self.inner_points = self._build_boundaries()
         self.segment_lengths, self.cumulative, self.total_length = self._build_progress_table()
         self.start_pos, self.start_angle = self._build_start()
 
-    def _build_centerline(self):
+    @classmethod
+    def from_file(cls, path, track_width=70):
+        with open(path, "r") as f:
+            data = json.load(f)
+
+        points = [(p[0], p[1]) for p in data["points"]]
+        return cls(track_width=track_width, centerline=points)
+
+    def _default_centerline(self):
         # closed loop, includes a chicane and sweeping corners like a real circuit
         return [
             (140, 480),

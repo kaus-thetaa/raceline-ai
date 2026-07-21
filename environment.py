@@ -2,6 +2,7 @@
 # gymnasium environment wrapping track and car for ppo training
 
 import math
+import os
 import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
@@ -9,21 +10,21 @@ from gymnasium import spaces
 from track import Track
 from car import Car
 
+CUSTOM_TRACK_PATH = "data/custom_track.json"
+
 
 class RaceLineEnv(gym.Env):
-    def __init__(self):
+    def __init__(self, track_path=None):
         super().__init__()
 
-        self.track = Track()
+        self.track = self._load_track(track_path)
         self.car = Car(*self.track.start_pos, math.degrees(self.track.start_angle))
 
-        # actions, throttle and steer, both continuous -1 to 1
         self.action_space = spaces.Box(
             low=np.array([-1.0, -1.0], dtype=np.float32),
             high=np.array([1.0, 1.0], dtype=np.float32),
         )
 
-        # observation, speed, angle to track direction, distance from centerline, progress
         self.observation_space = spaces.Box(
             low=np.array([-1.0, -1.0, -1.0, 0.0], dtype=np.float32),
             high=np.array([1.0, 1.0, 1.0, 1.0], dtype=np.float32),
@@ -34,6 +35,16 @@ class RaceLineEnv(gym.Env):
         self.last_progress = 0.0
         self.laps_completed = 0
         self.crash_count = 0
+
+    def _load_track(self, track_path):
+        # explicit path wins, otherwise auto detect a saved custom track, otherwise default
+        if track_path:
+            return Track.from_file(track_path)
+
+        if os.path.exists(CUSTOM_TRACK_PATH):
+            return Track.from_file(CUSTOM_TRACK_PATH)
+
+        return Track()
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -77,10 +88,8 @@ class RaceLineEnv(gym.Env):
         return observation, reward, terminated, truncated, info
 
     def _compute_reward(self, progress):
-        # forward progress along track gives reward, going backward or standing still does not
         delta = progress - self.last_progress
 
-        # wrap around case, progress reset from near 1.0 back to near 0.0 means a completed lap
         lap_completed = False
         if delta < -0.5:
             delta += 1.0

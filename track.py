@@ -4,8 +4,8 @@
 import math
 import pygame
 
-GRASS_LIGHT = (34, 102, 51)
-GRASS_DARK = (26, 88, 43)
+GRASS_LIGHT = (36, 96, 50)
+GRASS_DARK = (30, 86, 44)
 GRAVEL_COLOR = (196, 172, 128)
 ASPHALT_COLOR = (42, 42, 46)
 CURB_COLORS = [(210, 30, 30), (235, 235, 235)]
@@ -15,7 +15,7 @@ GRANDSTAND_ROOF_COLOR = (60, 60, 70)
 TREE_COLOR = (20, 70, 35)
 
 GRAVEL_MARGIN = 30
-STRIPE_HEIGHT = 50
+STRIPE_HEIGHT = 180
 
 
 class Track:
@@ -165,7 +165,6 @@ class Track:
         return len(self.centerline)
 
     def point_at_progress(self, fraction):
-        # walks the cumulative distance table to find where along the loop this fraction lands
         fraction = fraction % 1.0
         target_length = fraction * self.total_length
         count = len(self.centerline)
@@ -187,7 +186,6 @@ class Track:
         return a, heading
 
     def sensor_distance(self, x, y, angle_degrees, max_range=200, step=8):
-        # casts a ray from a point until it leaves the track, used as the car's wall sensors
         radians = math.radians(angle_degrees)
         dx = math.cos(radians)
         dy = math.sin(radians)
@@ -209,6 +207,7 @@ class Track:
         return [self._to_screen(p, camera) for p in points]
 
     def _draw_grass_stripes(self, surface, camera):
+        # taller stripes and closer colors, less flicker as the camera scrolls past them
         width, height = surface.get_size()
         start_offset = -(camera[1] % STRIPE_HEIGHT)
         stripe_count = int(height // STRIPE_HEIGHT) + 2

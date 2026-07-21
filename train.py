@@ -14,8 +14,19 @@ TOTAL_TIMESTEPS = 500_000
 MODEL_SAVE_PATH = "models/raceline_ppo"
 CHECKPOINT_DIR = "models/checkpoints"
 CHECKPOINT_FREQUENCY = 10_000
-HUD_COLOR = (255, 255, 255)
 SCREEN_SIZE = (1150, 650)
+
+HUD_LABEL_COLOR = (170, 170, 170)
+HUD_VALUE_COLOR = (255, 255, 255)
+HUD_BEST_COLOR = (120, 220, 140)
+HUD_PANEL_COLOR = (10, 10, 10, 165)
+HUD_PANEL_SIZE = (250, 220)
+
+
+def format_time(seconds):
+    minutes = int(seconds // 60)
+    secs = seconds % 60
+    return f"{minutes:02d}:{secs:05.2f}"
 
 
 class StatsCallback(BaseCallback):
@@ -54,7 +65,10 @@ class RenderCallback(BaseCallback):
         self.screen = screen
         self.tracker = tracker
         self.clock = pygame.time.Clock()
-        self.font = pygame.font.SysFont("consolas", 20)
+        self.label_font = pygame.font.SysFont("consolas", 14)
+        self.value_font = pygame.font.SysFont("consolas", 22, bold=True)
+        self.panel = pygame.Surface(HUD_PANEL_SIZE, pygame.SRCALPHA)
+        self.panel.fill(HUD_PANEL_COLOR)
 
     def _on_step(self):
         for event in pygame.event.get():
@@ -64,7 +78,6 @@ class RenderCallback(BaseCallback):
 
         env = self.training_env.envs[0].unwrapped
 
-        # camera follows the car, centered on screen, since the track is bigger than one screen
         screen_w, screen_h = self.screen.get_size()
         camera = (env.car.x - screen_w / 2, env.car.y - screen_h / 2)
 
@@ -76,21 +89,33 @@ class RenderCallback(BaseCallback):
 
         return True
 
+    def _draw_row(self, label, value, y, color=HUD_VALUE_COLOR):
+        label_surface = self.label_font.render(label, True, HUD_LABEL_COLOR)
+        value_surface = self.value_font.render(value, True, color)
+        self.panel.blit(label_surface, (16, y))
+        self.panel.blit(value_surface, (16, y + 16))
+
     def _draw_hud(self, env):
         best_lap = self.tracker.best_lap_time
         best_lap_text = f"{best_lap:.2f}s" if best_lap is not None else "-"
 
-        lines = [
-            f"episode {self.tracker.current_episode}",
-            f"crashes {self.tracker.total_crashes}",
-            f"laps {self.tracker.total_laps}",
-            f"speed {env.car.speed:.1f}",
-            f"best lap {best_lap_text}",
-        ]
+        self.panel.fill(HUD_PANEL_COLOR)
 
-        for i, line in enumerate(lines):
-            text_surface = self.font.render(line, True, HUD_COLOR)
-            self.screen.blit(text_surface, (10, 10 + i * 24))
+        self._draw_row("episode", str(self.tracker.current_episode), 10)
+        self._draw_row("crashes", str(self.tracker.total_crashes), 60)
+        self._draw_row("laps completed", str(self.tracker.total_laps), 110)
+        self._draw_row("current lap time", format_time(self.tracker.get_current_lap_time()), 160)
+        self._draw_row("best lap", best_lap_text, 210, color=HUD_BEST_COLOR)
+
+        self.screen.blit(self.panel, (10, 10))
+
+        total_time_text = "total time " + format_time(self.tracker.get_total_elapsed())
+        total_surface = self.label_font.render(total_time_text, True, HUD_LABEL_COLOR)
+        self.screen.blit(total_surface, (10, HUD_PANEL_SIZE[1] + 20))
+
+        speed_text = f"speed {env.car.speed:.1f}"
+        speed_surface = self.label_font.render(speed_text, True, HUD_LABEL_COLOR)
+        self.screen.blit(speed_surface, (10, HUD_PANEL_SIZE[1] + 40))
 
 
 def train(render=False, total_timesteps=TOTAL_TIMESTEPS):

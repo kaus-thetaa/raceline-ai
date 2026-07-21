@@ -26,6 +26,7 @@ class StatsTracker:
         self.lap_times = []
         self.steps_this_lap = 0
         self.current_lap_positions = []
+        self.training_start_time = time.time()
 
     def record_step(self):
         self.steps_this_lap += 1
@@ -58,6 +59,12 @@ class StatsTracker:
 
     def set_episode(self, episode_number):
         self.current_episode = episode_number
+
+    def get_current_lap_time(self):
+        return self.steps_this_lap / FRAMES_PER_SECOND
+
+    def get_total_elapsed(self):
+        return time.time() - self.training_start_time
 
     def _save_replay(self):
         if not self.current_lap_positions:

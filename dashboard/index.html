@@ -1,0 +1,62 @@
+<!-- dashboard/index.html -->
+<!-- structure for the live training dashboard, styling in style.css, logic in script.js -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>raceline-ai live dashboard</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <header>
+    <h1>raceline-ai</h1>
+    <p class="subtitle">an ai learning to race, live</p>
+  </header>
+
+  <section class="stats-grid">
+    <div class="stat-card">
+      <span class="stat-label">episode</span>
+      <span class="stat-value" id="stat-episode">-</span>
+    </div>
+
+    <div class="stat-card">
+      <span class="stat-label">total crashes</span>
+      <span class="stat-value" id="stat-crashes">-</span>
+    </div>
+
+    <div class="stat-card">
+      <span class="stat-label">laps completed</span>
+      <span class="stat-value" id="stat-laps">-</span>
+    </div>
+
+    <div class="stat-card">
+      <span class="stat-label">first lap time</span>
+      <span class="stat-value" id="stat-first-lap">-</span>
+    </div>
+
+    <div class="stat-card">
+      <span class="stat-label">best lap time</span>
+      <span class="stat-value" id="stat-best-lap">-</span>
+    </div>
+  </section>
+
+  <section class="graph-section">
+    <h2>lap time improvement</h2>
+    <canvas id="lap-chart" class="dashboard-canvas" width="900" height="360"></canvas>
+  </section>
+
+  <section class="graph-section">
+    <h2>latest lap replay</h2>
+    <canvas id="replay-canvas" class="dashboard-canvas" width="900" height="500"></canvas>
+  </section>
+
+  <footer>
+    <p id="last-updated">waiting for data</p>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>

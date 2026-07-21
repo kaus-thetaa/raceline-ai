@@ -37,7 +37,6 @@ class RaceLineEnv(gym.Env):
         self.crash_count = 0
 
     def _load_track(self, track_path):
-        # explicit path wins, otherwise auto detect a saved custom track, otherwise default
         if track_path:
             return Track.from_file(track_path)
 
@@ -84,6 +83,9 @@ class RaceLineEnv(gym.Env):
             "lap_completed": lap_completed,
             "crashed": terminated,
             "progress": progress,
+            "x": self.car.x,
+            "y": self.car.y,
+            "angle": self.car.angle,
         }
         return observation, reward, terminated, truncated, info
 

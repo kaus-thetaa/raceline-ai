@@ -1,5 +1,5 @@
 # stats.py
-# tracks live training stats and writes them for the dashboard
+# tracks live training stats, writes json, saves lap graph and best lap replay
 
 import json
 import os
@@ -10,6 +10,8 @@ import matplotlib.pyplot as plt
 
 STATS_FILE_PATH = "data/live_stats.json"
 GRAPH_FILE_PATH = "data/lap_times.png"
+REPLAY_FILE_PATH = "data/best_lap_replay.json"
+TRACK_SHAPE_PATH = "data/track_shape.json"
 FRAMES_PER_SECOND = 60
 
 
@@ -23,30 +25,59 @@ class StatsTracker:
         self.current_episode = 0
         self.lap_times = []
         self.steps_this_lap = 0
+        self.current_lap_positions = []
 
     def record_step(self):
         self.steps_this_lap += 1
 
+    def record_position(self, x, y, angle):
+        self.current_lap_positions.append([x, y, angle])
+
     def record_crash(self):
         self.total_crashes += 1
         self.steps_this_lap = 0
+        self.current_lap_positions = []
 
     def record_lap(self):
         lap_time = self.steps_this_lap / FRAMES_PER_SECOND
         self.total_laps += 1
         self.lap_times.append(lap_time)
 
+        is_new_best = self.best_lap_time is None or lap_time < self.best_lap_time
+
         if self.first_lap_time is None:
             self.first_lap_time = lap_time
 
-        if self.best_lap_time is None or lap_time < self.best_lap_time:
+        if is_new_best:
             self.best_lap_time = lap_time
+            self._save_replay()
 
         self.steps_this_lap = 0
+        self.current_lap_positions = []
         return lap_time
 
     def set_episode(self, episode_number):
         self.current_episode = episode_number
+
+    def _save_replay(self):
+        if not self.current_lap_positions:
+            return
+
+        data = {"positions": self.current_lap_positions}
+
+        os.makedirs(os.path.dirname(REPLAY_FILE_PATH), exist_ok=True)
+        with open(REPLAY_FILE_PATH, "w") as f:
+            json.dump(data, f)
+
+    def export_track_shape(self, track, path=TRACK_SHAPE_PATH):
+        data = {
+            "outer": [list(point) for point in track.outer_points],
+            "inner": [list(point) for point in track.inner_points],
+        }
+
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as f:
+            json.dump(data, f)
 
     def save(self):
         data = {
@@ -76,4 +107,4 @@ class StatsTracker:
 
         os.makedirs(os.path.dirname(image_path), exist_ok=True)
         plt.savefig(image_path)
-        plt.close() 
+        plt.close()

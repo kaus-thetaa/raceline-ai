@@ -27,6 +27,7 @@ class StatsCallback(BaseCallback):
 
         for info, done in zip(infos, dones):
             self.tracker.record_step()
+            self.tracker.record_position(info.get("x", 0), info.get("y", 0), info.get("angle", 0))
 
             if info.get("lap_completed"):
                 self.tracker.record_lap()
@@ -45,9 +46,11 @@ class StatsCallback(BaseCallback):
 
 
 def train(render=False, total_timesteps=TOTAL_TIMESTEPS):
-    env = Monitor(RaceLineEnv())
+    raw_env = RaceLineEnv()
     tracker = StatsTracker()
+    tracker.export_track_shape(raw_env.track)
 
+    env = Monitor(raw_env)
     stats_callback = StatsCallback(tracker)
     checkpoint_callback = CheckpointCallback(
         save_freq=CHECKPOINT_FREQUENCY,

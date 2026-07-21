@@ -46,7 +46,6 @@ class Track:
             (450, 520),
             (300, 500),
         ]
-        # scaled up 7x into a big world, far larger than one screen, so a lap takes real time
         return self._scale_points(raw_points, scale=7.0, center=(565, 340))
 
     def _scale_points(self, points, scale, center):
@@ -153,10 +152,6 @@ class Track:
 
         return best_index, best_t, best_distance
 
-    # kept for anything still calling the old private name
-    def _locate(self, x, y):
-        return self.locate(x, y)
-
     def is_on_track(self, x, y):
         _, _, distance = self.locate(x, y)
         return distance <= self.track_width / 2
@@ -169,6 +164,44 @@ class Track:
     def checkpoint_count(self):
         return len(self.centerline)
 
+    def point_at_progress(self, fraction):
+        # walks the cumulative distance table to find where along the loop this fraction lands
+        fraction = fraction % 1.0
+        target_length = fraction * self.total_length
+        count = len(self.centerline)
+
+        for i in range(count):
+            if self.cumulative[i + 1] >= target_length:
+                segment_start = self.cumulative[i]
+                segment_progress = (target_length - segment_start) / self.segment_lengths[i]
+                a = self.centerline[i]
+                b = self.centerline[(i + 1) % count]
+                x = a[0] + (b[0] - a[0]) * segment_progress
+                y = a[1] + (b[1] - a[1]) * segment_progress
+                heading = math.atan2(b[1] - a[1], b[0] - a[0])
+                return (x, y), heading
+
+        a = self.centerline[-1]
+        b = self.centerline[0]
+        heading = math.atan2(b[1] - a[1], b[0] - a[0])
+        return a, heading
+
+    def sensor_distance(self, x, y, angle_degrees, max_range=200, step=8):
+        # casts a ray from a point until it leaves the track, used as the car's wall sensors
+        radians = math.radians(angle_degrees)
+        dx = math.cos(radians)
+        dy = math.sin(radians)
+
+        distance = 0.0
+        while distance < max_range:
+            check_x = x + dx * distance
+            check_y = y + dy * distance
+            if not self.is_on_track(check_x, check_y):
+                return distance
+            distance += step
+
+        return max_range
+
     def _to_screen(self, point, camera):
         return (point[0] - camera[0], point[1] - camera[1])
 
@@ -177,7 +210,6 @@ class Track:
 
     def _draw_grass_stripes(self, surface, camera):
         width, height = surface.get_size()
-        # offset the stripe pattern by the camera so the ground appears to scroll too
         start_offset = -(camera[1] % STRIPE_HEIGHT)
         stripe_count = int(height // STRIPE_HEIGHT) + 2
 

@@ -1,5 +1,5 @@
 # environment.py
-# gymnasium environment wrapping track and car for ppo training
+# gymnasium environment wrapping track and car, now with look ahead and wall sensors
 
 import math
 import numpy as np
@@ -8,6 +8,10 @@ from gymnasium import spaces
 
 from track import Track
 from car import Car
+
+LOOKAHEAD_FRACTIONS = [0.02, 0.05, 0.09]
+SENSOR_ANGLES = [-90, -45, 0, 45, 90]
+SENSOR_MAX_RANGE = 200
 
 
 class RaceLineEnv(gym.Env):
@@ -22,9 +26,11 @@ class RaceLineEnv(gym.Env):
             high=np.array([1.0, 1.0], dtype=np.float32),
         )
 
+        # speed, heading diff, offset, progress, 3 lookahead angles, 5 wall sensors
+        obs_size = 4 + len(LOOKAHEAD_FRACTIONS) + len(SENSOR_ANGLES)
         self.observation_space = spaces.Box(
-            low=np.array([-1.0, -1.0, -1.0, 0.0], dtype=np.float32),
-            high=np.array([1.0, 1.0, 1.0, 1.0], dtype=np.float32),
+            low=np.full(obs_size, -1.0, dtype=np.float32),
+            high=np.full(obs_size, 1.0, dtype=np.float32),
         )
 
         self.max_steps = 6000
@@ -87,8 +93,6 @@ class RaceLineEnv(gym.Env):
         return length_so_far / self.track.total_length
 
     def _check_checkpoint(self, current_index):
-        # car must reach checkpoints strictly in order, reversing just re visits ones already passed
-        # so it can never trigger the next expected one, this makes fake laps from reversing impossible
         checkpoint_count = self.track.checkpoint_count()
 
         if current_index == self.next_checkpoint:
@@ -102,8 +106,6 @@ class RaceLineEnv(gym.Env):
     def _compute_reward(self, progress, lap_completed):
         delta = progress - self.last_progress
 
-        # ignore big jumps from the nearest point snapping across the start seam
-        # real forward progress in a single frame is always small, a large jump is not real movement
         if abs(delta) > 0.3:
             delta = 0.0
 
@@ -116,6 +118,25 @@ class RaceLineEnv(gym.Env):
             reward += 50
 
         return reward
+
+    def _get_lookahead_features(self, current_progress, car_heading_radians):
+        features = []
+        for fraction in LOOKAHEAD_FRACTIONS:
+            _, future_heading = self.track.point_at_progress(current_progress + fraction)
+            heading_diff = math.atan2(
+                math.sin(future_heading - car_heading_radians),
+                math.cos(future_heading - car_heading_radians),
+            )
+            features.append(heading_diff / math.pi)
+        return features
+
+    def _get_sensor_features(self):
+        features = []
+        for relative_angle in SENSOR_ANGLES:
+            world_angle = self.car.angle + relative_angle
+            distance = self.track.sensor_distance(self.car.x, self.car.y, world_angle, SENSOR_MAX_RANGE)
+            features.append((distance / SENSOR_MAX_RANGE) * 2 - 1)
+        return features
 
     def _get_observation(self):
         index, t, distance = self.track.locate(self.car.x, self.car.y)
@@ -131,7 +152,8 @@ class RaceLineEnv(gym.Env):
         normalized_offset = max(-1.0, min(1.0, distance / (self.track.track_width / 2)))
         progress = self._progress_from_locate(index, t)
 
-        return np.array(
-            [normalized_speed, normalized_heading_diff, normalized_offset, progress],
-            dtype=np.float32,
-        )
+        base_features = [normalized_speed, normalized_heading_diff, normalized_offset, progress]
+        lookahead_features = self._get_lookahead_features(progress, car_heading)
+        sensor_features = self._get_sensor_features()
+
+        return np.array(base_features + lookahead_features + sensor_features, dtype=np.float32)

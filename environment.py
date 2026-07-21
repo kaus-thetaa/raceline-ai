@@ -30,6 +30,7 @@ class RaceLineEnv(gym.Env):
         self.max_steps = 2000
         self.current_step = 0
         self.last_progress = 0.0
+        self.reached_midpoint = False
         self.laps_completed = 0
         self.crash_count = 0
 
@@ -39,6 +40,7 @@ class RaceLineEnv(gym.Env):
         self.car.reset(*self.track.start_pos, math.degrees(self.track.start_angle))
         self.current_step = 0
         self.last_progress = 0.0
+        self.reached_midpoint = False
 
         observation = self._get_observation()
         info = {}
@@ -80,10 +82,17 @@ class RaceLineEnv(gym.Env):
     def _compute_reward(self, progress):
         delta = progress - self.last_progress
 
+        # only count real forward progress toward "reached the far side" of the lap
+        if progress > 0.5:
+            self.reached_midpoint = True
+
+        # a wrap from near 1.0 back to near 0.0 only counts as a real lap if the
+        # car actually made it past the midpoint first, not just jittering near the seam
         lap_completed = False
-        if delta < -0.5:
+        if delta < -0.5 and self.reached_midpoint:
             delta += 1.0
             lap_completed = True
+            self.reached_midpoint = False
 
         reward = delta * 100
 

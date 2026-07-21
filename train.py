@@ -4,13 +4,15 @@
 import os
 from stable_baselines3 import PPO
 from stable_baselines3.common.monitor import Monitor
-from stable_baselines3.common.callbacks import BaseCallback
+from stable_baselines3.common.callbacks import BaseCallback, CheckpointCallback
 
 from environment import RaceLineEnv
 from stats import StatsTracker
 
 TOTAL_TIMESTEPS = 500_000
 MODEL_SAVE_PATH = "models/raceline_ppo"
+CHECKPOINT_DIR = "models/checkpoints"
+CHECKPOINT_FREQUENCY = 10_000
 
 
 class StatsCallback(BaseCallback):
@@ -45,17 +47,26 @@ class StatsCallback(BaseCallback):
 def train(render=False, total_timesteps=TOTAL_TIMESTEPS):
     env = Monitor(RaceLineEnv())
     tracker = StatsTracker()
-    callback = StatsCallback(tracker)
+
+    stats_callback = StatsCallback(tracker)
+    checkpoint_callback = CheckpointCallback(
+        save_freq=CHECKPOINT_FREQUENCY,
+        save_path=CHECKPOINT_DIR,
+        name_prefix="raceline_ppo",
+    )
 
     model = PPO("MlpPolicy", env, verbose=1, device="cpu")
-    model.learn(total_timesteps=total_timesteps, callback=callback)
 
-    os.makedirs("models", exist_ok=True)
-    model.save(MODEL_SAVE_PATH)
-
-    tracker.save()
-    tracker.save_graph()
-    print("training complete, model saved to", MODEL_SAVE_PATH)
+    try:
+        model.learn(total_timesteps=total_timesteps, callback=[stats_callback, checkpoint_callback])
+    except KeyboardInterrupt:
+        print("training interrupted, saving progress so far")
+    finally:
+        os.makedirs("models", exist_ok=True)
+        model.save(MODEL_SAVE_PATH)
+        tracker.save()
+        tracker.save_graph()
+        print("model saved to", MODEL_SAVE_PATH)
 
     return model, tracker
 

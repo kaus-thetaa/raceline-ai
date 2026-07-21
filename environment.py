@@ -2,7 +2,6 @@
 # gymnasium environment wrapping track and car for ppo training
 
 import math
-import os
 import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
@@ -10,14 +9,12 @@ from gymnasium import spaces
 from track import Track
 from car import Car
 
-CUSTOM_TRACK_PATH = "data/custom_track.json"
-
 
 class RaceLineEnv(gym.Env):
-    def __init__(self, track_path=None):
+    def __init__(self):
         super().__init__()
 
-        self.track = self._load_track(track_path)
+        self.track = Track()
         self.car = Car(*self.track.start_pos, math.degrees(self.track.start_angle))
 
         self.action_space = spaces.Box(
@@ -35,15 +32,6 @@ class RaceLineEnv(gym.Env):
         self.last_progress = 0.0
         self.laps_completed = 0
         self.crash_count = 0
-
-    def _load_track(self, track_path):
-        if track_path:
-            return Track.from_file(track_path)
-
-        if os.path.exists(CUSTOM_TRACK_PATH):
-            return Track.from_file(CUSTOM_TRACK_PATH)
-
-        return Track()
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)

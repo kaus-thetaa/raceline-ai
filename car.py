@@ -18,11 +18,14 @@ class Car:
         self.speed = 0.0
         self.crashed = False
 
-        self.max_speed = 6.0
-        self.acceleration = 0.15
-        self.brake_power = 0.3
-        self.friction = 0.02
-        self.turn_speed = 3.5
+        self.max_speed = 8.0
+        self.acceleration = 0.22
+        self.brake_power = 0.45
+        self.drag_coefficient = 0.0025
+        self.rolling_resistance = 0.015
+        self.turn_speed = 3.2
+        self.corner_slip_threshold = 0.45
+        self.corner_slip_factor = 0.06
 
         self.length = 26
         self.width = 12
@@ -38,15 +41,27 @@ class Car:
         if self.crashed:
             return
 
+        # engine pull fades near top speed, like a real gearbox running out of pull
+        power_factor = max(0.0, 1 - (abs(self.speed) / self.max_speed))
+
         if throttle > 0:
-            self.speed += self.acceleration * throttle
+            self.speed += self.acceleration * throttle * power_factor
         elif throttle < 0:
             self.speed += self.brake_power * throttle
 
+        # aerodynamic drag grows with speed squared, rolling resistance stays constant
+        drag = self.drag_coefficient * self.speed * abs(self.speed)
+        self.speed -= drag
+
         if self.speed > 0:
-            self.speed -= self.friction
+            self.speed = max(0.0, self.speed - self.rolling_resistance)
         elif self.speed < 0:
-            self.speed += self.friction
+            self.speed = min(0.0, self.speed + self.rolling_resistance)
+
+        # hard cornering at speed bleeds off speed, like tires losing grip
+        if abs(steer) > self.corner_slip_threshold and self.speed > self.max_speed * 0.4:
+            slip_penalty = abs(steer) * self.corner_slip_factor * self.speed
+            self.speed -= slip_penalty
 
         self.speed = max(-self.max_speed / 2, min(self.max_speed, self.speed))
 
@@ -83,7 +98,6 @@ class Car:
         half_len = self.length / 2
         half_wid = self.width / 2
 
-        # main body, nose pointed forward along local x axis
         body_points = [
             self._rotated(half_len, 0),
             self._rotated(half_len * 0.4, half_wid),
@@ -94,7 +108,6 @@ class Car:
         color = (90, 90, 90) if self.crashed else BODY_COLOR
         pygame.draw.polygon(surface, color, body_points)
 
-        # rear wing
         wing_points = [
             self._rotated(-half_len, half_wid * 1.3),
             self._rotated(-half_len * 0.7, half_wid * 1.3),
@@ -103,7 +116,6 @@ class Car:
         ]
         pygame.draw.polygon(surface, WING_COLOR, wing_points)
 
-        # front wing
         front_wing_points = [
             self._rotated(half_len * 0.5, half_wid * 1.4),
             self._rotated(half_len * 0.7, half_wid * 1.4),
@@ -112,11 +124,9 @@ class Car:
         ]
         pygame.draw.polygon(surface, WING_COLOR, front_wing_points)
 
-        # helmet, small circle just behind center
         helmet_pos = self._rotated(-half_len * 0.1, 0)
         pygame.draw.circle(surface, HELMET_COLOR, (int(helmet_pos[0]), int(helmet_pos[1])), 3)
 
-        # four wheels as small dark rectangles at each corner
         wheel_offsets = [
             (half_len * 0.5, half_wid * 1.1),
             (half_len * 0.5, -half_wid * 1.1),

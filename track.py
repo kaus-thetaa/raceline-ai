@@ -1,55 +1,42 @@
 # track.py
-# f1 style circuit geometry, curbs, checkered line, collision, progress
+# hardcoded f1 style circuit, tuned for a roughly 10 second lap
 
-import json
 import math
 import pygame
 
 GRASS_COLOR = (24, 90, 43)
-ASPHALT_COLOR = (40, 40, 40)
+ASPHALT_COLOR = (42, 42, 46)
 BOUNDARY_COLOR = (235, 235, 235)
 CURB_COLORS = [(210, 30, 30), (235, 235, 235)]
+CENTERLINE_COLOR = (255, 255, 255)
 
 
 class Track:
-    def __init__(self, track_width=70, centerline=None):
+    def __init__(self, track_width=65):
         self.track_width = track_width
-        self.centerline = centerline if centerline else self._default_centerline()
-
-        if len(self.centerline) < 3:
-            raise ValueError("track needs at least 3 points to form a loop")
-
+        self.centerline = self._build_centerline()
         self.outer_points, self.inner_points = self._build_boundaries()
         self.segment_lengths, self.cumulative, self.total_length = self._build_progress_table()
         self.start_pos, self.start_angle = self._build_start()
 
-    @classmethod
-    def from_file(cls, path, track_width=70):
-        with open(path, "r") as f:
-            data = json.load(f)
-
-        points = [(p[0], p[1]) for p in data["points"]]
-        return cls(track_width=track_width, centerline=points)
-
-    def _default_centerline(self):
-        # closed loop, includes a chicane and sweeping corners like a real circuit
+    def _build_centerline(self):
+        # compact circuit with a hairpin style turn and a chicane, tuned for around 10s laps
         return [
-            (140, 480),
-            (140, 320),
-            (200, 200),
-            (320, 140),
-            (460, 160),
-            (520, 230),
-            (460, 280),
-            (560, 330),
-            (750, 250),
-            (950, 180),
-            (1080, 260),
-            (1050, 420),
-            (900, 500),
-            (700, 540),
-            (450, 540),
-            (280, 520),
+            (200, 480),
+            (200, 320),
+            (260, 220),
+            (380, 160),
+            (520, 170),
+            (580, 240),
+            (520, 300),
+            (620, 340),
+            (780, 260),
+            (900, 300),
+            (930, 420),
+            (830, 500),
+            (650, 520),
+            (450, 520),
+            (300, 500),
         ]
 
     def _build_boundaries(self):
@@ -151,6 +138,31 @@ class Track:
             color = CURB_COLORS[i % 2]
             pygame.draw.line(surface, color, a, b, 6)
 
+    def _draw_center_dashes(self, surface):
+        dash_length = 14
+        gap_length = 12
+        points = self.centerline
+        count = len(points)
+
+        for i in range(count):
+            a = points[i]
+            b = points[(i + 1) % count]
+            segment_length = math.hypot(b[0] - a[0], b[1] - a[1])
+            if segment_length == 0:
+                continue
+
+            step = dash_length + gap_length
+            dash_count = int(segment_length // step)
+
+            for d in range(dash_count):
+                t1 = (d * step) / segment_length
+                t2 = t1 + (dash_length / segment_length)
+                x1 = a[0] + (b[0] - a[0]) * t1
+                y1 = a[1] + (b[1] - a[1]) * t1
+                x2 = a[0] + (b[0] - a[0]) * t2
+                y2 = a[1] + (b[1] - a[1]) * t2
+                pygame.draw.line(surface, CENTERLINE_COLOR, (x1, y1), (x2, y2), 3)
+
     def _draw_start_line(self, surface):
         outer = self.outer_points[0]
         inner = self.inner_points[0]
@@ -172,4 +184,5 @@ class Track:
         pygame.draw.polygon(surface, GRASS_COLOR, self.inner_points)
         self._draw_curbs(surface, self.outer_points)
         self._draw_curbs(surface, self.inner_points)
+        self._draw_center_dashes(surface)
         self._draw_start_line(surface)

@@ -27,10 +27,10 @@ class RaceLineEnv(gym.Env):
             high=np.array([1.0, 1.0, 1.0, 1.0], dtype=np.float32),
         )
 
-        self.max_steps = 2000
+        self.max_steps = 6000
         self.current_step = 0
         self.last_progress = 0.0
-        self.reached_midpoint = False
+        self.next_checkpoint = 1
         self.laps_completed = 0
         self.crash_count = 0
 
@@ -40,7 +40,7 @@ class RaceLineEnv(gym.Env):
         self.car.reset(*self.track.start_pos, math.degrees(self.track.start_angle))
         self.current_step = 0
         self.last_progress = 0.0
-        self.reached_midpoint = False
+        self.next_checkpoint = 1
 
         observation = self._get_observation()
         info = {}
@@ -54,8 +54,11 @@ class RaceLineEnv(gym.Env):
         self.car.check_collision(self.track)
         self.current_step += 1
 
-        progress = self.track.get_progress(self.car.x, self.car.y)
-        reward, lap_completed = self._compute_reward(progress)
+        index, t, distance = self.track.locate(self.car.x, self.car.y)
+        progress = self._progress_from_locate(index, t)
+
+        lap_completed = self._check_checkpoint(index)
+        reward = self._compute_reward(progress, lap_completed)
 
         terminated = self.car.crashed
         truncated = self.current_step >= self.max_steps
@@ -79,20 +82,30 @@ class RaceLineEnv(gym.Env):
         }
         return observation, reward, terminated, truncated, info
 
-    def _compute_reward(self, progress):
+    def _progress_from_locate(self, index, t):
+        length_so_far = self.track.cumulative[index] + t * self.track.segment_lengths[index]
+        return length_so_far / self.track.total_length
+
+    def _check_checkpoint(self, current_index):
+        # car must reach checkpoints strictly in order, reversing just re visits ones already passed
+        # so it can never trigger the next expected one, this makes fake laps from reversing impossible
+        checkpoint_count = self.track.checkpoint_count()
+
+        if current_index == self.next_checkpoint:
+            self.next_checkpoint = (self.next_checkpoint + 1) % checkpoint_count
+
+            if self.next_checkpoint == 1:
+                return True
+
+        return False
+
+    def _compute_reward(self, progress, lap_completed):
         delta = progress - self.last_progress
 
-        # only count real forward progress toward "reached the far side" of the lap
-        if progress > 0.5:
-            self.reached_midpoint = True
-
-        # a wrap from near 1.0 back to near 0.0 only counts as a real lap if the
-        # car actually made it past the midpoint first, not just jittering near the seam
-        lap_completed = False
-        if delta < -0.5 and self.reached_midpoint:
-            delta += 1.0
-            lap_completed = True
-            self.reached_midpoint = False
+        # ignore big jumps from the nearest point snapping across the start seam
+        # real forward progress in a single frame is always small, a large jump is not real movement
+        if abs(delta) > 0.3:
+            delta = 0.0
 
         reward = delta * 100
 
@@ -102,10 +115,10 @@ class RaceLineEnv(gym.Env):
         if lap_completed:
             reward += 50
 
-        return reward, lap_completed
+        return reward
 
     def _get_observation(self):
-        index, t, distance = self.track._locate(self.car.x, self.car.y)
+        index, t, distance = self.track.locate(self.car.x, self.car.y)
         a = self.track.centerline[index]
         b = self.track.centerline[(index + 1) % len(self.track.centerline)]
         track_heading = math.atan2(b[1] - a[1], b[0] - a[0])
@@ -116,7 +129,7 @@ class RaceLineEnv(gym.Env):
         normalized_speed = self.car.speed / self.car.max_speed
         normalized_heading_diff = heading_diff / math.pi
         normalized_offset = max(-1.0, min(1.0, distance / (self.track.track_width / 2)))
-        progress = self.track.get_progress(self.car.x, self.car.y)
+        progress = self._progress_from_locate(index, t)
 
         return np.array(
             [normalized_speed, normalized_heading_diff, normalized_offset, progress],

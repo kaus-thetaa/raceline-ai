@@ -15,6 +15,7 @@ MODEL_SAVE_PATH = "models/raceline_ppo"
 CHECKPOINT_DIR = "models/checkpoints"
 CHECKPOINT_FREQUENCY = 10_000
 HUD_COLOR = (255, 255, 255)
+SCREEN_SIZE = (1150, 650)
 
 
 class StatsCallback(BaseCallback):
@@ -63,8 +64,12 @@ class RenderCallback(BaseCallback):
 
         env = self.training_env.envs[0].unwrapped
 
-        env.track.draw(self.screen)
-        env.car.draw(self.screen)
+        # camera follows the car, centered on screen, since the track is bigger than one screen
+        screen_w, screen_h = self.screen.get_size()
+        camera = (env.car.x - screen_w / 2, env.car.y - screen_h / 2)
+
+        env.track.draw(self.screen, camera)
+        env.car.draw(self.screen, camera)
         self._draw_hud(env)
         pygame.display.flip()
         self.clock.tick(60)
@@ -105,7 +110,7 @@ def train(render=False, total_timesteps=TOTAL_TIMESTEPS):
     screen = None
     if render:
         pygame.init()
-        screen = pygame.display.set_mode((1150, 650))
+        screen = pygame.display.set_mode(SCREEN_SIZE)
         pygame.display.set_caption("raceline-ai training")
         callbacks.append(RenderCallback(screen, tracker))
 

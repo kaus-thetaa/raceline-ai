@@ -1,5 +1,5 @@
 # car.py
-# car physics, state, movement, collision check, f1 style rendering
+# car physics, state, movement, collision check, f1 style rendering with camera offset
 
 import math
 import pygame
@@ -27,8 +27,8 @@ class Car:
         self.corner_slip_threshold = 0.45
         self.corner_slip_factor = 0.06
 
-        self.length = 26
-        self.width = 12
+        self.length = 34
+        self.width = 16
 
     def reset(self, x, y, angle):
         self.x = x
@@ -41,7 +41,6 @@ class Car:
         if self.crashed:
             return
 
-        # engine pull fades near top speed, like a real gearbox running out of pull
         power_factor = max(0.0, 1 - (abs(self.speed) / self.max_speed))
 
         if throttle > 0:
@@ -49,7 +48,6 @@ class Car:
         elif throttle < 0:
             self.speed += self.brake_power * throttle
 
-        # aerodynamic drag grows with speed squared, rolling resistance stays constant
         drag = self.drag_coefficient * self.speed * abs(self.speed)
         self.speed -= drag
 
@@ -58,7 +56,6 @@ class Car:
         elif self.speed < 0:
             self.speed = min(0.0, self.speed + self.rolling_resistance)
 
-        # hard cornering at speed bleeds off speed, like tires losing grip
         if abs(steer) > self.corner_slip_threshold and self.speed > self.max_speed * 0.4:
             slip_penalty = abs(steer) * self.corner_slip_factor * self.speed
             self.speed -= slip_penalty
@@ -94,38 +91,41 @@ class Car:
         world_y = self.y + local_x * sin_a + local_y * cos_a
         return (world_x, world_y)
 
-    def draw(self, surface):
+    def _to_screen(self, world_point, camera):
+        return (world_point[0] - camera[0], world_point[1] - camera[1])
+
+    def draw(self, surface, camera=(0, 0)):
         half_len = self.length / 2
         half_wid = self.width / 2
 
         body_points = [
-            self._rotated(half_len, 0),
-            self._rotated(half_len * 0.4, half_wid),
-            self._rotated(-half_len * 0.7, half_wid),
-            self._rotated(-half_len * 0.7, -half_wid),
-            self._rotated(half_len * 0.4, -half_wid),
+            self._to_screen(self._rotated(half_len, 0), camera),
+            self._to_screen(self._rotated(half_len * 0.4, half_wid), camera),
+            self._to_screen(self._rotated(-half_len * 0.7, half_wid), camera),
+            self._to_screen(self._rotated(-half_len * 0.7, -half_wid), camera),
+            self._to_screen(self._rotated(half_len * 0.4, -half_wid), camera),
         ]
         color = (90, 90, 90) if self.crashed else BODY_COLOR
         pygame.draw.polygon(surface, color, body_points)
 
         wing_points = [
-            self._rotated(-half_len, half_wid * 1.3),
-            self._rotated(-half_len * 0.7, half_wid * 1.3),
-            self._rotated(-half_len * 0.7, -half_wid * 1.3),
-            self._rotated(-half_len, -half_wid * 1.3),
+            self._to_screen(self._rotated(-half_len, half_wid * 1.3), camera),
+            self._to_screen(self._rotated(-half_len * 0.7, half_wid * 1.3), camera),
+            self._to_screen(self._rotated(-half_len * 0.7, -half_wid * 1.3), camera),
+            self._to_screen(self._rotated(-half_len, -half_wid * 1.3), camera),
         ]
         pygame.draw.polygon(surface, WING_COLOR, wing_points)
 
         front_wing_points = [
-            self._rotated(half_len * 0.5, half_wid * 1.4),
-            self._rotated(half_len * 0.7, half_wid * 1.4),
-            self._rotated(half_len * 0.7, -half_wid * 1.4),
-            self._rotated(half_len * 0.5, -half_wid * 1.4),
+            self._to_screen(self._rotated(half_len * 0.5, half_wid * 1.4), camera),
+            self._to_screen(self._rotated(half_len * 0.7, half_wid * 1.4), camera),
+            self._to_screen(self._rotated(half_len * 0.7, -half_wid * 1.4), camera),
+            self._to_screen(self._rotated(half_len * 0.5, -half_wid * 1.4), camera),
         ]
         pygame.draw.polygon(surface, WING_COLOR, front_wing_points)
 
-        helmet_pos = self._rotated(-half_len * 0.1, 0)
-        pygame.draw.circle(surface, HELMET_COLOR, (int(helmet_pos[0]), int(helmet_pos[1])), 3)
+        helmet_pos = self._to_screen(self._rotated(-half_len * 0.1, 0), camera)
+        pygame.draw.circle(surface, HELMET_COLOR, (int(helmet_pos[0]), int(helmet_pos[1])), 4)
 
         wheel_offsets = [
             (half_len * 0.5, half_wid * 1.1),
@@ -134,5 +134,5 @@ class Car:
             (-half_len * 0.5, -half_wid * 1.1),
         ]
         for offset_x, offset_y in wheel_offsets:
-            wheel_pos = self._rotated(offset_x, offset_y)
-            pygame.draw.circle(surface, WHEEL_COLOR, (int(wheel_pos[0]), int(wheel_pos[1])), 3)
+            wheel_pos = self._to_screen(self._rotated(offset_x, offset_y), camera)
+            pygame.draw.circle(surface, WHEEL_COLOR, (int(wheel_pos[0]), int(wheel_pos[1])), 4)

@@ -11,7 +11,9 @@ from stable_baselines3.common.callbacks import BaseCallback, CheckpointCallback
 from environment import RaceLineEnv
 from stats import StatsTracker
 
-TOTAL_TIMESTEPS = 500_000
+TOTAL_TIMESTEPS = 3_000_000
+CURRICULUM_TIMESTEPS = 2_000_000
+
 MODEL_SAVE_PATH = "models/raceline_ppo"
 VECNORMALIZE_SAVE_PATH = "models/vecnormalize.pkl"
 CHECKPOINT_DIR = "models/checkpoints"
@@ -66,6 +68,15 @@ class StatsCallback(BaseCallback):
 
         return True
 
+class CurriculumCallback(BaseCallback):
+    def __init__(self, ramp_timesteps, verbose=0):
+        super().__init__(verbose)
+        self.ramp_timesteps = ramp_timesteps
+
+    def _on_step(self):
+        difficulty = min(1.0, self.num_timesteps / self.ramp_timesteps)
+        self.training_env.env_method("set_difficulty", difficulty)
+        return True
 
 class RenderCallback(BaseCallback):
     def __init__(self, screen, tracker, verbose=0):
@@ -150,7 +161,7 @@ def train(render=False, total_timesteps=TOTAL_TIMESTEPS, n_envs=None):
         save_path=CHECKPOINT_DIR,
         name_prefix="raceline_ppo",
     )
-    callbacks = [StatsCallback(tracker), checkpoint_callback]
+    callbacks = [StatsCallback(tracker), checkpoint_callback, CurriculumCallback(CURRICULUM_TIMESTEPS)]
 
     screen = None
     if render:

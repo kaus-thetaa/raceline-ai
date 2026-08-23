@@ -1,5 +1,5 @@
 # environment.py
-# gymnasium environment, generates a brand new random track every episode
+# gymnasium environment, difficulty scales via curriculum, robust lap detection
 
 import math
 import numpy as np
@@ -12,13 +12,15 @@ from car import Car
 LOOKAHEAD_FRACTIONS = [0.02, 0.05, 0.09]
 SENSOR_ANGLES = [-90, -45, 0, 45, 90]
 SENSOR_MAX_RANGE = 200
+LAP_MIN_PROGRESS = 0.7
 
 
 class RaceLineEnv(gym.Env):
     def __init__(self):
         super().__init__()
 
-        self.track = Track()
+        self.difficulty = 1.0
+        self.track = Track(difficulty=self.difficulty)
         self.car = Car(*self.track.start_pos, math.degrees(self.track.start_angle))
 
         self.action_space = spaces.Box(
@@ -35,18 +37,22 @@ class RaceLineEnv(gym.Env):
         self.max_steps = 6000
         self.current_step = 0
         self.last_progress = 0.0
-        self.next_checkpoint = 1
+        self.max_progress_reached = 0.0
         self.laps_completed = 0
         self.crash_count = 0
+
+    def set_difficulty(self, difficulty):
+        # called by the training callback as timesteps progress, ramps easy to hard
+        self.difficulty = difficulty
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
 
-        self.track = Track()
+        self.track = Track(difficulty=self.difficulty)
         self.car.reset(*self.track.start_pos, math.degrees(self.track.start_angle))
         self.current_step = 0
         self.last_progress = 0.0
-        self.next_checkpoint = 1
+        self.max_progress_reached = 0.0
 
         observation = self._get_observation()
         info = {}
@@ -60,11 +66,8 @@ class RaceLineEnv(gym.Env):
         self.car.check_collision(self.track)
         self.current_step += 1
 
-        index, t, distance = self.track.locate(self.car.x, self.car.y)
-        progress = self._progress_from_locate(index, t)
-
-        lap_completed = self._check_checkpoint(index)
-        reward = self._compute_reward(progress, lap_completed)
+        progress = self.track.get_progress(self.car.x, self.car.y)
+        reward, lap_completed = self._compute_reward(progress)
 
         terminated = self.car.crashed
         truncated = self.current_step >= self.max_steps
@@ -87,34 +90,26 @@ class RaceLineEnv(gym.Env):
             "angle": self.car.angle,
         }
 
-        # only attach track shape data on the frame a lap actually completes, this is how
-        # the stats tracker learns the shape when environments run in separate processes
         if lap_completed:
             info["track_outer"] = [list(p) for p in self.track.outer_points]
             info["track_inner"] = [list(p) for p in self.track.inner_points]
 
         return observation, reward, terminated, truncated, info
 
-    def _progress_from_locate(self, index, t):
-        length_so_far = self.track.cumulative[index] + t * self.track.segment_lengths[index]
-        return length_so_far / self.track.total_length
-
-    def _check_checkpoint(self, current_index):
-        checkpoint_count = self.track.checkpoint_count()
-
-        if current_index == self.next_checkpoint:
-            self.next_checkpoint = (self.next_checkpoint + 1) % checkpoint_count
-
-            if self.next_checkpoint == 1:
-                return True
-
-        return False
-
-    def _compute_reward(self, progress, lap_completed):
+    def _compute_reward(self, progress):
         delta = progress - self.last_progress
 
         if abs(delta) > 0.3:
             delta = 0.0
+
+        # track the furthest point reached this episode, not tied to any single index
+        # a wrap back near zero only counts as a real lap if most of the track was covered first
+        self.max_progress_reached = max(self.max_progress_reached, progress)
+
+        lap_completed = False
+        if delta < -0.5 and self.max_progress_reached >= LAP_MIN_PROGRESS:
+            lap_completed = True
+            self.max_progress_reached = 0.0
 
         reward = delta * 100
 
@@ -124,7 +119,7 @@ class RaceLineEnv(gym.Env):
         if lap_completed:
             reward += 50
 
-        return reward
+        return reward, lap_completed
 
     def _get_lookahead_features(self, current_progress, car_heading_radians):
         features = []
@@ -157,7 +152,7 @@ class RaceLineEnv(gym.Env):
         normalized_speed = self.car.speed / self.car.max_speed
         normalized_heading_diff = heading_diff / math.pi
         normalized_offset = max(-1.0, min(1.0, distance / (self.track.track_width / 2)))
-        progress = self._progress_from_locate(index, t)
+        progress = self.track.get_progress(self.car.x, self.car.y)
 
         base_features = [normalized_speed, normalized_heading_diff, normalized_offset, progress]
         lookahead_features = self._get_lookahead_features(progress, car_heading)

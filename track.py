@@ -1,5 +1,5 @@
 # track.py
-# procedurally generated f1 style circuit, new random layout every episode
+# procedurally generated f1 style circuit, difficulty scales from easy to hard for curriculum learning
 
 import math
 import random
@@ -18,27 +18,45 @@ TREE_COLOR = (20, 70, 35)
 GRAVEL_MARGIN = 30
 STRIPE_HEIGHT = 180
 
+# easy tracks are short, wide, gentle loops, hard tracks are the full sized twisty circuits
+EASY_SETTINGS = {"min_points": 7, "max_points": 8, "radius_jitter": 120, "base_radius": 850, "track_width": 140}
+HARD_SETTINGS = {"min_points": 10, "max_points": 16, "radius_jitter": 550, "base_radius": 1600, "track_width": 90}
+
 
 class Track:
-    def __init__(self, track_width=90):
-        self.track_width = track_width
-        self.centerline = self._generate_random_centerline()
+    def __init__(self, difficulty=1.0):
+        # difficulty 0 is easiest, 1 is the full hard circuit, callers can pass anything between
+        difficulty = max(0.0, min(1.0, difficulty))
+        settings = self._interpolate_settings(difficulty)
+
+        self.track_width = settings["track_width"]
+        self.centerline = self._generate_random_centerline(settings)
         self.outer_points, self.inner_points = self._build_boundaries()
         self.gravel_points = self._build_gravel_boundary()
         self.segment_lengths, self.cumulative, self.total_length = self._build_progress_table()
         self.start_pos, self.start_angle = self._build_start()
         self.tree_spots = self._build_tree_spots()
 
-    def _generate_random_centerline(self, center=(0, 0), base_radius=1600, radius_jitter=550):
-        # scatter points around a circle with randomized angle and radius, then smooth them
-        # this is the same general technique used for random track generation in racing sims
-        num_points = random.randint(10, 16)
+    def _interpolate_settings(self, difficulty):
+        def lerp(easy_val, hard_val):
+            return easy_val + (hard_val - easy_val) * difficulty
+
+        return {
+            "min_points": round(lerp(EASY_SETTINGS["min_points"], HARD_SETTINGS["min_points"])),
+            "max_points": round(lerp(EASY_SETTINGS["max_points"], HARD_SETTINGS["max_points"])),
+            "radius_jitter": lerp(EASY_SETTINGS["radius_jitter"], HARD_SETTINGS["radius_jitter"]),
+            "base_radius": lerp(EASY_SETTINGS["base_radius"], HARD_SETTINGS["base_radius"]),
+            "track_width": lerp(EASY_SETTINGS["track_width"], HARD_SETTINGS["track_width"]),
+        }
+
+    def _generate_random_centerline(self, settings, center=(0, 0)):
+        num_points = random.randint(settings["min_points"], settings["max_points"])
         angle_step = (2 * math.pi) / num_points
         points = []
 
         for i in range(num_points):
             angle = i * angle_step + random.uniform(-0.3, 0.3) * angle_step
-            radius = base_radius + random.uniform(-radius_jitter, radius_jitter)
+            radius = settings["base_radius"] + random.uniform(-settings["radius_jitter"], settings["radius_jitter"])
             x = center[0] + math.cos(angle) * radius
             y = center[1] + math.sin(angle) * radius
             points.append((x, y))
@@ -49,7 +67,6 @@ class Track:
         return points
 
     def _smooth_points(self, points):
-        # averages each point with its neighbors, rounds off sharp jagged corners from randomness
         count = len(points)
         smoothed = []
 
@@ -97,7 +114,6 @@ class Track:
         return self._offset_points(half)
 
     def _build_tree_spots(self, count=10, min_offset=180, max_offset=380):
-        # scatter trees just outside the track at random points along whatever shape was generated
         spots = []
         point_count = len(self.centerline)
 
@@ -185,9 +201,6 @@ class Track:
         index, t, _ = self.locate(x, y)
         length_so_far = self.cumulative[index] + t * self.segment_lengths[index]
         return length_so_far / self.total_length
-
-    def checkpoint_count(self):
-        return len(self.centerline)
 
     def point_at_progress(self, fraction):
         fraction = fraction % 1.0

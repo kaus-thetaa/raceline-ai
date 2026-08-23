@@ -5,7 +5,7 @@ import os
 import pygame
 from stable_baselines3 import PPO
 from stable_baselines3.common.monitor import Monitor
-from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
+from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecNormalize
 from stable_baselines3.common.callbacks import BaseCallback, CheckpointCallback
 
 from environment import RaceLineEnv
@@ -13,6 +13,7 @@ from stats import StatsTracker
 
 TOTAL_TIMESTEPS = 500_000
 MODEL_SAVE_PATH = "models/raceline_ppo"
+VECNORMALIZE_SAVE_PATH = "models/vecnormalize.pkl"
 CHECKPOINT_DIR = "models/checkpoints"
 CHECKPOINT_FREQUENCY = 10_000
 SCREEN_SIZE = (1150, 650)
@@ -128,16 +129,19 @@ class RenderCallback(BaseCallback):
 def train(render=False, total_timesteps=TOTAL_TIMESTEPS, n_envs=None):
     tracker = StatsTracker()
 
-    # rendering only makes sense with exactly one car to watch, parallel envs are headless only
     if render:
         n_envs = 1
     elif n_envs is None:
         n_envs = max(1, (os.cpu_count() or 2) - 1)
 
+    using_vecnormalize = False
+
     if n_envs == 1:
         env = DummyVecEnv([make_env()])
     else:
         env = SubprocVecEnv([make_env() for _ in range(n_envs)])
+        env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_obs=10.0)
+        using_vecnormalize = True
 
     print("training with", n_envs, "parallel environment(s)")
 
@@ -164,6 +168,11 @@ def train(render=False, total_timesteps=TOTAL_TIMESTEPS, n_envs=None):
     finally:
         os.makedirs("models", exist_ok=True)
         model.save(MODEL_SAVE_PATH)
+
+        if using_vecnormalize:
+            env.save(VECNORMALIZE_SAVE_PATH)
+            print("normalization stats saved to", VECNORMALIZE_SAVE_PATH)
+
         tracker.save()
         tracker.save_graph()
         print("model saved to", MODEL_SAVE_PATH)

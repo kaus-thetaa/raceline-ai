@@ -41,26 +41,24 @@ class Car:
         if self.crashed:
             return
 
-        power_factor = max(0.0, 1 - (abs(self.speed) / self.max_speed))
+        power_factor = max(0.0, 1 - (self.speed / self.max_speed))
 
         if throttle > 0:
             self.speed += self.acceleration * throttle * power_factor
         elif throttle < 0:
+            # negative throttle only brakes toward a stop, no reverse, real racing doesn't reverse
             self.speed += self.brake_power * throttle
 
-        drag = self.drag_coefficient * self.speed * abs(self.speed)
+        drag = self.drag_coefficient * self.speed * self.speed
         self.speed -= drag
-
-        if self.speed > 0:
-            self.speed = max(0.0, self.speed - self.rolling_resistance)
-        elif self.speed < 0:
-            self.speed = min(0.0, self.speed + self.rolling_resistance)
+        self.speed = max(0.0, self.speed - self.rolling_resistance)
 
         if abs(steer) > self.corner_slip_threshold and self.speed > self.max_speed * 0.4:
             slip_penalty = abs(steer) * self.corner_slip_factor * self.speed
             self.speed -= slip_penalty
 
-        self.speed = max(-self.max_speed / 2, min(self.max_speed, self.speed))
+        # speed floor is 0, not negative, this is the actual reverse lockout
+        self.speed = max(0.0, min(self.max_speed, self.speed))
 
         speed_factor = self.speed / self.max_speed
         self.angle += steer * self.turn_speed * speed_factor

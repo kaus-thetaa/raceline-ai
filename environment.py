@@ -42,7 +42,6 @@ class RaceLineEnv(gym.Env):
         self.crash_count = 0
 
     def set_difficulty(self, difficulty):
-        # called by the training callback as timesteps progress, ramps easy to hard
         self.difficulty = difficulty
 
     def reset(self, seed=None, options=None):
@@ -97,19 +96,21 @@ class RaceLineEnv(gym.Env):
         return observation, reward, terminated, truncated, info
 
     def _compute_reward(self, progress):
-        delta = progress - self.last_progress
-
-        if abs(delta) > 0.3:
-            delta = 0.0
-
-        # track the furthest point reached this episode, not tied to any single index
-        # a wrap back near zero only counts as a real lap if most of the track was covered first
+        # check the real, unmodified delta for a lap wrap before any clipping touches it
+        raw_delta = progress - self.last_progress
         self.max_progress_reached = max(self.max_progress_reached, progress)
 
-        lap_completed = False
-        if delta < -0.5 and self.max_progress_reached >= LAP_MIN_PROGRESS:
-            lap_completed = True
+        lap_completed = raw_delta < -0.5 and self.max_progress_reached >= LAP_MIN_PROGRESS
+
+        if lap_completed:
+            # unwrap the jump into the small genuine forward step it actually represents
+            delta = 1.0 + raw_delta
             self.max_progress_reached = 0.0
+        elif abs(raw_delta) > 0.3:
+            # a large jump that isn't a real lap is a geometry glitch, not real movement
+            delta = 0.0
+        else:
+            delta = raw_delta
 
         reward = delta * 100
 

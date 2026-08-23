@@ -145,33 +145,30 @@ def train(render=False, total_timesteps=TOTAL_TIMESTEPS, n_envs=None):
     elif n_envs is None:
         n_envs = max(1, (os.cpu_count() or 2) - 1)
 
+# in train(), replace the model creation and env-building section with this:
+
     using_vecnormalize = False
 
     if n_envs == 1:
         env = DummyVecEnv([make_env()])
     else:
         env = SubprocVecEnv([make_env() for _ in range(n_envs)])
-        env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_obs=10.0)
+        if os.path.exists(VECNORMALIZE_SAVE_PATH):
+            env = VecNormalize.load(VECNORMALIZE_SAVE_PATH, env)
+            print("loaded existing normalization stats, continuing with them")
+        else:
+            env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_obs=10.0)
         using_vecnormalize = True
 
     print("training with", n_envs, "parallel environment(s)")
 
-    checkpoint_callback = CheckpointCallback(
-        save_freq=max(CHECKPOINT_FREQUENCY // n_envs, 1),
-        save_path=CHECKPOINT_DIR,
-        name_prefix="raceline_ppo",
-    )
-    callbacks = [StatsCallback(tracker), checkpoint_callback, CurriculumCallback(CURRICULUM_TIMESTEPS)]
+    if os.path.exists(MODEL_SAVE_PATH + ".zip"):
+        model = PPO.load(MODEL_SAVE_PATH, env=env, device="cpu")
+        print("loaded existing model, continuing training instead of starting fresh")
+    else:
+        model = PPO("MlpPolicy", env, verbose=1, device="cpu")
 
-    screen = None
-    if render:
-        pygame.init()
-        screen = pygame.display.set_mode(SCREEN_SIZE)
-        pygame.display.set_caption("raceline-ai training")
-        callbacks.append(RenderCallback(screen, tracker))
-
-    model = PPO("MlpPolicy", env, verbose=1, device="cpu")
-
+        
     try:
         model.learn(total_timesteps=total_timesteps, callback=callbacks)
     except KeyboardInterrupt:

@@ -36,6 +36,7 @@ class StatsCallback(BaseCallback):
         self.episode_count = 0
 
     def _on_step(self):
+        env = self.training_env.envs[0].unwrapped
         infos = self.locals.get("infos", [])
         dones = self.locals.get("dones", [])
 
@@ -44,7 +45,7 @@ class StatsCallback(BaseCallback):
             self.tracker.record_position(info.get("x", 0), info.get("y", 0), info.get("angle", 0))
 
             if info.get("lap_completed"):
-                self.tracker.record_lap()
+                self.tracker.record_lap(env.track)
                 self.tracker.save()
                 self.tracker.save_graph()
 
@@ -121,7 +122,6 @@ class RenderCallback(BaseCallback):
 def train(render=False, total_timesteps=TOTAL_TIMESTEPS):
     raw_env = RaceLineEnv()
     tracker = StatsTracker()
-    tracker.export_track_shape(raw_env.track)
 
     env = Monitor(raw_env)
 

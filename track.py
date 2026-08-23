@@ -1,7 +1,8 @@
 # track.py
-# hardcoded f1 style circuit, big world with camera scrolling, tuned for a long lap
+# procedurally generated f1 style circuit, new random layout every episode
 
 import math
+import random
 import pygame
 
 GRASS_LIGHT = (36, 96, 50)
@@ -21,40 +22,46 @@ STRIPE_HEIGHT = 180
 class Track:
     def __init__(self, track_width=90):
         self.track_width = track_width
-        self.centerline = self._build_centerline()
+        self.centerline = self._generate_random_centerline()
         self.outer_points, self.inner_points = self._build_boundaries()
         self.gravel_points = self._build_gravel_boundary()
         self.segment_lengths, self.cumulative, self.total_length = self._build_progress_table()
         self.start_pos, self.start_angle = self._build_start()
         self.tree_spots = self._build_tree_spots()
 
-    def _build_centerline(self):
-        raw_points = [
-            (200, 480),
-            (200, 320),
-            (260, 220),
-            (380, 160),
-            (520, 170),
-            (580, 240),
-            (520, 300),
-            (620, 340),
-            (780, 260),
-            (900, 300),
-            (930, 420),
-            (830, 500),
-            (650, 520),
-            (450, 520),
-            (300, 500),
-        ]
-        return self._scale_points(raw_points, scale=7.0, center=(565, 340))
+    def _generate_random_centerline(self, center=(0, 0), base_radius=1600, radius_jitter=550):
+        # scatter points around a circle with randomized angle and radius, then smooth them
+        # this is the same general technique used for random track generation in racing sims
+        num_points = random.randint(10, 16)
+        angle_step = (2 * math.pi) / num_points
+        points = []
 
-    def _scale_points(self, points, scale, center):
-        scaled = []
-        for x, y in points:
-            new_x = center[0] + (x - center[0]) * scale
-            new_y = center[1] + (y - center[1]) * scale
-            scaled.append((new_x, new_y))
-        return scaled
+        for i in range(num_points):
+            angle = i * angle_step + random.uniform(-0.3, 0.3) * angle_step
+            radius = base_radius + random.uniform(-radius_jitter, radius_jitter)
+            x = center[0] + math.cos(angle) * radius
+            y = center[1] + math.sin(angle) * radius
+            points.append((x, y))
+
+        for _ in range(2):
+            points = self._smooth_points(points)
+
+        return points
+
+    def _smooth_points(self, points):
+        # averages each point with its neighbors, rounds off sharp jagged corners from randomness
+        count = len(points)
+        smoothed = []
+
+        for i in range(count):
+            prev_point = points[i - 1]
+            current_point = points[i]
+            next_point = points[(i + 1) % count]
+            avg_x = (prev_point[0] + current_point[0] + next_point[0]) / 3
+            avg_y = (prev_point[1] + current_point[1] + next_point[1]) / 3
+            smoothed.append((avg_x, avg_y))
+
+        return smoothed
 
     def _offset_points(self, half_width):
         points = self.centerline
@@ -89,12 +96,30 @@ class Track:
         half = (self.track_width / 2) + GRAVEL_MARGIN
         return self._offset_points(half)
 
-    def _build_tree_spots(self):
-        raw_spots = [
-            (120, 150), (160, 550), (1000, 150), (1020, 560),
-            (450, 90), (750, 590), (60, 350), (1080, 350),
-        ]
-        return self._scale_points(raw_spots, scale=7.0, center=(565, 340))
+    def _build_tree_spots(self, count=10, min_offset=180, max_offset=380):
+        # scatter trees just outside the track at random points along whatever shape was generated
+        spots = []
+        point_count = len(self.centerline)
+
+        for _ in range(count):
+            index = random.randrange(point_count)
+            base_point = self.centerline[index]
+            prev_point = self.centerline[index - 1]
+            next_point = self.centerline[(index + 1) % point_count]
+
+            dx = next_point[0] - prev_point[0]
+            dy = next_point[1] - prev_point[1]
+            length = math.hypot(dx, dy) or 1
+            perp_x = -dy / length
+            perp_y = dx / length
+
+            side = random.choice([-1, 1])
+            offset = random.uniform(min_offset, max_offset)
+            x = base_point[0] + perp_x * offset * side
+            y = base_point[1] + perp_y * offset * side
+            spots.append((x, y))
+
+        return spots
 
     def _build_progress_table(self):
         points = self.centerline
@@ -207,7 +232,6 @@ class Track:
         return [self._to_screen(p, camera) for p in points]
 
     def _draw_grass_stripes(self, surface, camera):
-        # taller stripes and closer colors, less flicker as the camera scrolls past them
         width, height = surface.get_size()
         start_offset = -(camera[1] % STRIPE_HEIGHT)
         stripe_count = int(height // STRIPE_HEIGHT) + 2

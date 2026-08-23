@@ -1,5 +1,5 @@
 # environment.py
-# gymnasium environment wrapping track and car, now with look ahead and wall sensors
+# gymnasium environment, generates a brand new random track every episode
 
 import math
 import numpy as np
@@ -26,7 +26,6 @@ class RaceLineEnv(gym.Env):
             high=np.array([1.0, 1.0], dtype=np.float32),
         )
 
-        # speed, heading diff, offset, progress, 3 lookahead angles, 5 wall sensors
         obs_size = 4 + len(LOOKAHEAD_FRACTIONS) + len(SENSOR_ANGLES)
         self.observation_space = spaces.Box(
             low=np.full(obs_size, -1.0, dtype=np.float32),
@@ -43,6 +42,9 @@ class RaceLineEnv(gym.Env):
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
 
+        # a fresh random track every episode, this is what makes the agent generalize
+        # instead of memorizing one fixed path
+        self.track = Track()
         self.car.reset(*self.track.start_pos, math.degrees(self.track.start_angle))
         self.current_step = 0
         self.last_progress = 0.0

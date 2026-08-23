@@ -39,7 +39,9 @@ class StatsTracker:
         self.steps_this_lap = 0
         self.current_lap_positions = []
 
-    def record_lap(self):
+    def record_lap(self, track):
+        # track is passed in because it changes every episode now, the replay and its
+        # matching track shape have to be saved together or the replay wouldn't line up
         lap_time = self.steps_this_lap / FRAMES_PER_SECOND
         self.total_laps += 1
         self.lap_times.append(lap_time)
@@ -52,6 +54,7 @@ class StatsTracker:
         if is_new_best:
             self.best_lap_time = lap_time
             self._save_replay()
+            self.export_track_shape(track)
 
         self.steps_this_lap = 0
         self.current_lap_positions = []

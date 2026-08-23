@@ -5,6 +5,7 @@ import os
 import pygame
 from stable_baselines3 import PPO
 from stable_baselines3.common.monitor import Monitor
+from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 from stable_baselines3.common.callbacks import BaseCallback, CheckpointCallback
 
 from environment import RaceLineEnv
@@ -29,6 +30,12 @@ def format_time(seconds):
     return f"{minutes:02d}:{secs:05.2f}"
 
 
+def make_env():
+    def _init():
+        return Monitor(RaceLineEnv())
+    return _init
+
+
 class StatsCallback(BaseCallback):
     def __init__(self, tracker, verbose=0):
         super().__init__(verbose)
@@ -36,7 +43,6 @@ class StatsCallback(BaseCallback):
         self.episode_count = 0
 
     def _on_step(self):
-        env = self.training_env.envs[0].unwrapped
         infos = self.locals.get("infos", [])
         dones = self.locals.get("dones", [])
 
@@ -45,7 +51,7 @@ class StatsCallback(BaseCallback):
             self.tracker.record_position(info.get("x", 0), info.get("y", 0), info.get("angle", 0))
 
             if info.get("lap_completed"):
-                self.tracker.record_lap(env.track)
+                self.tracker.record_lap(info.get("track_outer"), info.get("track_inner"))
                 self.tracker.save()
                 self.tracker.save_graph()
 
@@ -119,14 +125,24 @@ class RenderCallback(BaseCallback):
         self.screen.blit(speed_surface, (10, HUD_PANEL_SIZE[1] + 40))
 
 
-def train(render=False, total_timesteps=TOTAL_TIMESTEPS):
-    raw_env = RaceLineEnv()
+def train(render=False, total_timesteps=TOTAL_TIMESTEPS, n_envs=None):
     tracker = StatsTracker()
 
-    env = Monitor(raw_env)
+    # rendering only makes sense with exactly one car to watch, parallel envs are headless only
+    if render:
+        n_envs = 1
+    elif n_envs is None:
+        n_envs = max(1, (os.cpu_count() or 2) - 1)
+
+    if n_envs == 1:
+        env = DummyVecEnv([make_env()])
+    else:
+        env = SubprocVecEnv([make_env() for _ in range(n_envs)])
+
+    print("training with", n_envs, "parallel environment(s)")
 
     checkpoint_callback = CheckpointCallback(
-        save_freq=CHECKPOINT_FREQUENCY,
+        save_freq=max(CHECKPOINT_FREQUENCY // n_envs, 1),
         save_path=CHECKPOINT_DIR,
         name_prefix="raceline_ppo",
     )
@@ -154,6 +170,8 @@ def train(render=False, total_timesteps=TOTAL_TIMESTEPS):
 
         if render:
             pygame.quit()
+
+        env.close()
 
     return model, tracker
 

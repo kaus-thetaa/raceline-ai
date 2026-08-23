@@ -39,9 +39,9 @@ class StatsTracker:
         self.steps_this_lap = 0
         self.current_lap_positions = []
 
-    def record_lap(self, track):
-        # track is passed in because it changes every episode now, the replay and its
-        # matching track shape have to be saved together or the replay wouldn't line up
+    def record_lap(self, track_outer=None, track_inner=None):
+        # track points are passed in rather than a live track object, since with parallel
+        # environments the environment that finished the lap may live in a different process
         lap_time = self.steps_this_lap / FRAMES_PER_SECOND
         self.total_laps += 1
         self.lap_times.append(lap_time)
@@ -54,7 +54,8 @@ class StatsTracker:
         if is_new_best:
             self.best_lap_time = lap_time
             self._save_replay()
-            self.export_track_shape(track)
+            if track_outer and track_inner:
+                self._export_track_shape_points(track_outer, track_inner)
 
         self.steps_this_lap = 0
         self.current_lap_positions = []
@@ -79,11 +80,8 @@ class StatsTracker:
         with open(REPLAY_FILE_PATH, "w") as f:
             json.dump(data, f)
 
-    def export_track_shape(self, track, path=TRACK_SHAPE_PATH):
-        data = {
-            "outer": [list(point) for point in track.outer_points],
-            "inner": [list(point) for point in track.inner_points],
-        }
+    def _export_track_shape_points(self, outer_points, inner_points, path=TRACK_SHAPE_PATH):
+        data = {"outer": outer_points, "inner": inner_points}
 
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as f:

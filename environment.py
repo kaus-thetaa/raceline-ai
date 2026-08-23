@@ -42,8 +42,6 @@ class RaceLineEnv(gym.Env):
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
 
-        # a fresh random track every episode, this is what makes the agent generalize
-        # instead of memorizing one fixed path
         self.track = Track()
         self.car.reset(*self.track.start_pos, math.degrees(self.track.start_angle))
         self.current_step = 0
@@ -88,6 +86,13 @@ class RaceLineEnv(gym.Env):
             "y": self.car.y,
             "angle": self.car.angle,
         }
+
+        # only attach track shape data on the frame a lap actually completes, this is how
+        # the stats tracker learns the shape when environments run in separate processes
+        if lap_completed:
+            info["track_outer"] = [list(p) for p in self.track.outer_points]
+            info["track_inner"] = [list(p) for p in self.track.inner_points]
+
         return observation, reward, terminated, truncated, info
 
     def _progress_from_locate(self, index, t):
